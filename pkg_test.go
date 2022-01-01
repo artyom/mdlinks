@@ -1,4 +1,4 @@
-package mdurlcheck
+package mdlinks
 
 import (
 	"errors"

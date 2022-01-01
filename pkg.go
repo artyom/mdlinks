@@ -1,6 +1,6 @@
-// Package mdurlcheck provides functions to verify cross links in a set of
+// Package mdlinks provides functions to verify cross links in a set of
 // markdown files.
-package mdurlcheck
+package mdlinks
 
 import (
 	"fmt"

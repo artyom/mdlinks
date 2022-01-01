@@ -1,4 +1,4 @@
-module github.com/artyom/mdurlcheck
+module github.com/artyom/mdlinks
 
 go 1.18
 

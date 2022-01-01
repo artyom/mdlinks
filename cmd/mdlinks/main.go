@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/artyom/mdurlcheck"
+	"github.com/artyom/mdlinks"
 )
 
 func main() {
@@ -16,8 +16,8 @@ func main() {
 	flag.StringVar(&dir, "d", dir, "directory to scan; it's considered to be a root for absolute links")
 	flag.StringVar(&pat, "p", pat, "glob pattern to match markdown files")
 	flag.Parse()
-	err := mdurlcheck.CheckFS(os.DirFS(dir), pat)
-	var e *mdurlcheck.BrokenLinksError
+	err := mdlinks.CheckFS(os.DirFS(dir), pat)
+	var e *mdlinks.BrokenLinksError
 	if errors.As(err, &e) {
 		for _, link := range e.Links {
 			log.Println(link)
