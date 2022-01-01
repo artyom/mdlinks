@@ -174,14 +174,27 @@ func extractDocDetails(body []byte) (*docDetails, error) {
 	return out, nil
 }
 
+// BrokenLinksError is an error type returned by this package functions to
+// report found broken links.
+//
+// Usage example:
+//
+// 	err := mdlinks.CheckFS(os.DirFS(dir), "*.md")
+// 	var e *mdlinks.BrokenLinksError
+// 	if errors.As(err, &e) {
+// 		for _, link := range e.Links {
+// 			log.Println(link)
+// 		}
+// 	}
 type BrokenLinksError struct {
 	Links []BrokenLink
 }
 
 func (e *BrokenLinksError) Error() string { return "broken links found" }
 
+// BrokenLink describes broken markdown link and the file it belongs to.
 type BrokenLink struct {
-	File string
+	File string // file path, relative to directory/filesystem scanned; uses '/' as a separator
 	Link LinkInfo
 	kind violationKind
 }
@@ -204,13 +217,13 @@ const (
 	kindBrokenExternalAnchor
 )
 
+// LinkInfo describes markdown link
 type LinkInfo struct {
-	Raw      string // as seen in the source
-	Path     string
-	Fragment string // fragment for references, without '#'
+	Raw      string // as seen in the source, usually “some/path#fragment”
+	Path     string // only the path part of the link
+	Fragment string // only the fragment part of the link, without '#'
 }
 
-// var mdparser = goldmark.DefaultParser()
 var mdparser = parser.NewParser(
 	parser.WithBlockParsers(parser.DefaultBlockParsers()...),
 	parser.WithInlineParsers(parser.DefaultInlineParsers()...),
