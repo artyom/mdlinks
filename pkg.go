@@ -209,6 +209,16 @@ func (b BrokenLink) String() string {
 	return fmt.Sprintf("%s: link %q points to a non-existing file", b.File, b.Link.Raw)
 }
 
+func (b BrokenLink) Reason() string {
+	switch b.kind {
+	case kindBrokenInternalAnchor:
+		return "link points to a non-existing local slug"
+	case kindBrokenExternalAnchor:
+		return "link points to a non-existing slug"
+	}
+	return "link points to a non-existing file"
+}
+
 type violationKind byte
 
 const (

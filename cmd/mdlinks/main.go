@@ -19,8 +19,12 @@ func main() {
 	err := mdlinks.CheckFS(os.DirFS(dir), pat)
 	var e *mdlinks.BrokenLinksError
 	if errors.As(err, &e) {
-		for _, link := range e.Links {
-			log.Println(link)
+		isGithub := os.Getenv("GITHUB_ACTIONS") == "true"
+		for _, l := range e.Links {
+			log.Println(l)
+			if isGithub {
+				log.Printf("::error file=%s,title=%s::%s", l.File, l.Reason(), l)
+			}
 		}
 		os.Exit(127)
 	}

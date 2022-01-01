@@ -1,0 +1,19 @@
+# https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions
+name: Verify cross-document local links in a set of markdown files
+description: >
+  Find broken local links in a set of markdown files.
+inputs:
+  dir:
+    description: Directory to scan; it's considered to be a root for absolute links
+    required: true
+    default: '.'
+  glob:
+    description: Glob pattern to match markdown files (only file names are matched, not full paths)
+    required: true
+    default: '*.md'
+runs:
+  using: 'docker'
+  image: 'docker://ghcr.io/artyom/mdlinks:latest'
+  args:
+    - '-d=${{ inputs.dir }}'
+    - '-p=${{ inputs.glob }}'
