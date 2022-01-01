@@ -20,7 +20,7 @@ func main() {
 	var e *mdurlcheck.BrokenLinksError
 	if errors.As(err, &e) {
 		for _, link := range e.Links {
-			log.Printf("%v:\t%v", link.File, link.Link)
+			log.Println(link)
 		}
 		os.Exit(127)
 	}

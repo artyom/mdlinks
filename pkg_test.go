@@ -16,9 +16,9 @@ func TestCheckFS(t *testing.T) {
 		t.Fatalf("want *ErrBrokenLinks, got %v", err)
 	}
 	expected := []BrokenLink{
-		{"index.md", "three.md"},
-		{"one.md", "/three.md"},
-		{"subdir/two.md", "../three.md"},
+		{"index.md", LinkInfo{Raw: "three.md", Path: "three.md"}, kindFileNotExists},
+		{"one.md", LinkInfo{Raw: "/three.md", Path: "/three.md"}, kindFileNotExists},
+		{"subdir/two.md", LinkInfo{Raw: "../three.md#hi", Path: "../three.md", Fragment: "hi"}, kindFileNotExists},
 	}
 	if len(e.Links) != len(expected) {
 		t.Fatalf("broken links got: %+v\nwant: %+v", e.Links, expected)
@@ -33,11 +33,9 @@ func TestCheckFS(t *testing.T) {
 	if err := copyDirectory(dir, "testdata"); err != nil {
 		t.Fatalf("copying testdata: %v", err)
 	}
-	f, err := os.Create(filepath.Join(dir, "three.md"))
-	if err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "three.md"), []byte("## Hi!\n"), 0666); err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
 	if err := CheckFS(os.DirFS(dir), "*.md"); err != nil {
 		var e *BrokenLinksError
 		if errors.As(err, &e) {

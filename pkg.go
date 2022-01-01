@@ -3,13 +3,16 @@
 package mdurlcheck
 
 import (
+	"fmt"
 	"io/fs"
 	"net/url"
 	"path"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
-	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 )
 
@@ -32,6 +35,28 @@ func CheckFS(fsys fs.FS, pat string) error {
 		defer f.Close()
 		return true
 	}
+	// track processed files to make sure each one is processed only once, even
+	// if we need to get back to it at a later time to get its header ids. Keys
+	// are full fsys paths.
+	seen := make(map[string]*docDetails)
+	getFileMeta := func(p string) (*docDetails, error) {
+		docMeta, ok := seen[p]
+		if ok {
+			return docMeta, nil
+		}
+		b, err := fs.ReadFile(fsys, p)
+		if err != nil {
+			return nil, err
+		}
+		if !utf8.Valid(b) {
+			return nil, fmt.Errorf("%s is not a valid utf8 file", p)
+		}
+		if docMeta, err = extractDocDetails(b); err != nil {
+			return nil, err
+		}
+		seen[p] = docMeta
+		return docMeta, nil
+	}
 	var brokenLinks []BrokenLink
 	fn := func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -43,25 +68,48 @@ func CheckFS(fsys fs.FS, pat string) error {
 		if ok, _ := path.Match(pat, d.Name()); !ok {
 			return nil
 		}
-		b, err := fs.ReadFile(fsys, p)
+		docMeta, err := getFileMeta(p)
 		if err != nil {
 			return err
 		}
-		links, err := extractLocalLinks(b)
-		if err != nil {
-			return err
-		}
-		// log.Printf("DEBUG: %s: %v", p, links)
-		for _, s := range links {
+		// log.Printf("DEBUG: %s: %v", p, docMeta.anchors)
+		for _, s := range docMeta.links {
 			var srel string // fs.FS relative path that link points to
 
-			if s != "" && s[0] == '/' { // e.g. “/abc”
-				srel = s[1:]
-			} else { // e.g. “abc” or “../abc”
-				srel = path.Join(strings.TrimSuffix(p, d.Name()), s)
+			if s.Path != "" && s.Path[0] == '/' { // e.g. “/abc”
+				srel = s.Path[1:]
+			} else if s.Path != "" { // e.g. “abc” or “../abc”
+				srel = path.Join(strings.TrimSuffix(p, d.Name()), s.Path)
 			}
-			if !exists(srel) {
+			// path is non-empty
+			if srel != "" && !exists(srel) {
 				brokenLinks = append(brokenLinks, BrokenLink{File: p, Link: s})
+				continue
+			}
+			// path is empty, and fragment is non-empty (internal link)
+			if s.Path == "" && s.Fragment != "" { // internal link
+				if _, ok := docMeta.anchors[s.Fragment]; !ok {
+					brokenLinks = append(brokenLinks, BrokenLink{File: p, Link: s, kind: kindBrokenInternalAnchor})
+					continue
+				}
+			}
+			if srel == "" || s.Fragment == "" {
+				continue
+			}
+			if ok, _ := path.Match(pat, path.Base(srel)); !ok {
+				continue
+			}
+			// path is non-empty, fragment is non-empty, path points to the markdown file
+			meta2, err := getFileMeta(srel)
+			if err != nil {
+				return err
+			}
+			if _, ok := meta2.anchors[s.Fragment]; !ok {
+				brokenLinks = append(brokenLinks, BrokenLink{
+					File: p,
+					Link: s,
+					kind: kindBrokenExternalAnchor,
+				})
 			}
 		}
 		return nil
@@ -75,7 +123,12 @@ func CheckFS(fsys fs.FS, pat string) error {
 	return nil
 }
 
-func extractLocalLinks(body []byte) ([]string, error) {
+type docDetails struct {
+	links   []LinkInfo          // non-external links
+	anchors map[string]struct{} // header slugs
+}
+
+func extractDocDetails(body []byte) (*docDetails, error) {
 	var links []string
 	fn := func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -97,19 +150,28 @@ func extractLocalLinks(body []byte) ([]string, error) {
 		}
 		return ast.WalkContinue, nil
 	}
-	node := mdparser.Parse(text.NewReader(body))
+	idgen := new(idGenerator)
+	node := mdparser.Parse(text.NewReader(body), parser.WithContext(parser.NewContext(parser.WithIDs(idgen))))
 	if err := ast.Walk(node, fn); err != nil {
 		return nil, err
 	}
-	out := links[:0]
+	local := make([]LinkInfo, 0)
 	for _, s := range links {
 		u, err := url.Parse(s)
 		if err != nil || u.Scheme != "" || u.Host != "" {
 			continue
 		}
-		out = append(out, u.Path)
+		if u.Path == "" && u.Fragment == "" {
+			continue
+		}
+		local = append(local, LinkInfo{Raw: s, Path: u.Path, Fragment: u.Fragment})
 	}
-	return out[:len(out):len(out)], nil
+	out := &docDetails{anchors: idgen.seen}
+	if l := len(local); l != 0 {
+		out.links = make([]LinkInfo, l)
+		copy(out.links, local)
+	}
+	return out, nil
 }
 
 type BrokenLinksError struct {
@@ -120,7 +182,82 @@ func (e *BrokenLinksError) Error() string { return "broken links found" }
 
 type BrokenLink struct {
 	File string
-	Link string
+	Link LinkInfo
+	kind violationKind
 }
 
-var mdparser = goldmark.DefaultParser()
+func (b BrokenLink) String() string {
+	switch b.kind {
+	case kindBrokenInternalAnchor:
+		return fmt.Sprintf("%s: link %q points to a non-existing local slug", b.File, b.Link.Raw)
+	case kindBrokenExternalAnchor:
+		return fmt.Sprintf("%s: link %q points to a non-existing slug", b.File, b.Link.Raw)
+	}
+	return fmt.Sprintf("%s: link %q points to a non-existing file", b.File, b.Link.Raw)
+}
+
+type violationKind byte
+
+const (
+	kindFileNotExists = iota
+	kindBrokenInternalAnchor
+	kindBrokenExternalAnchor
+)
+
+type LinkInfo struct {
+	Raw      string // as seen in the source
+	Path     string
+	Fragment string // fragment for references, without '#'
+}
+
+// var mdparser = goldmark.DefaultParser()
+var mdparser = parser.NewParser(
+	parser.WithBlockParsers(parser.DefaultBlockParsers()...),
+	parser.WithInlineParsers(parser.DefaultInlineParsers()...),
+	parser.WithParagraphTransformers(parser.DefaultParagraphTransformers()...),
+	parser.WithAutoHeadingID(),
+)
+
+// idGenerator creates ids for HTML headers
+type idGenerator struct {
+	seen map[string]struct{}
+}
+
+func (g *idGenerator) Generate(value []byte, kind ast.NodeKind) []byte {
+	if kind != ast.KindHeading || len(value) == 0 {
+		return nil
+	}
+	if g.seen == nil {
+		g.seen = make(map[string]struct{})
+	}
+	var anchorName []rune
+	var futureDash = false
+	for _, r := range string(value) {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsNumber(r):
+			if futureDash && len(anchorName) > 0 {
+				anchorName = append(anchorName, '-')
+			}
+			futureDash = false
+			anchorName = append(anchorName, unicode.ToLower(r))
+		default:
+			futureDash = true
+		}
+	}
+	name := string(anchorName)
+	for i := 0; i < 100; i++ {
+		var cand string
+		if i == 0 {
+			cand = name
+		} else {
+			cand = fmt.Sprintf("%s-%d", name, i)
+		}
+		if _, ok := g.seen[cand]; !ok {
+			g.seen[cand] = struct{}{}
+			return []byte(cand)
+		}
+	}
+	return nil
+}
+
+func (g *idGenerator) Put(value []byte) {}
