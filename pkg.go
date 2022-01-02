@@ -62,6 +62,9 @@ func CheckFS(fsys fs.FS, pat string) error {
 		if err != nil {
 			return err
 		}
+		if d.IsDir() && d.Name() == ".git" {
+			return fs.SkipDir
+		}
 		if d.IsDir() {
 			return nil
 		}
