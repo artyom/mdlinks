@@ -1,5 +1,5 @@
-// Package mdlinks provides functions to verify cross links in a set of
-// markdown files.
+// Package mdlinks provides functions to verify cross document links in a set
+// of markdown files.
 package mdlinks
 
 import (
@@ -18,10 +18,10 @@ import (
 
 // CheckFS walks file system fsys looking for files with their base names
 // matching pattern pat. It parses such files as markdown, looks for local urls
-// (urls that only specify paths), and reports if it find any urls that point
-// to non-existing files.
+// (urls don't have schema and domain), and reports if it finds any urls
+// pointing to non-existing files.
 //
-// If returned error is a *BrokenLinksError, it describes found files with
+// If error returned is a *BrokenLinksError, it describes found files with
 // broken links.
 func CheckFS(fsys fs.FS, pat string) error {
 	if _, err := path.Match(pat, "xxx"); err != nil { // report bad pattern early
