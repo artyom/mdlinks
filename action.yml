@@ -15,5 +15,5 @@ runs:
   using: 'docker'
   image: 'docker://ghcr.io/artyom/mdlinks:latest'
   args:
-    - '-d=${{ inputs.dir }}'
-    - '-p=${{ inputs.glob }}'
+    - '-dir=${{ inputs.dir }}'
+    - '-pat=${{ inputs.glob }}'

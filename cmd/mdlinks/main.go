@@ -13,8 +13,8 @@ func main() {
 	log.SetFlags(0)
 	dir := "."
 	pat := "*.md"
-	flag.StringVar(&dir, "d", dir, "directory to scan; it's considered to be a root for absolute links")
-	flag.StringVar(&pat, "p", pat, "glob pattern to match markdown files")
+	flag.StringVar(&dir, "dir", dir, "`directory` to scan; it's considered to be a root for absolute links")
+	flag.StringVar(&pat, "pat", pat, "glob `pattern` to match markdown files")
 	flag.Parse()
 	err := mdlinks.CheckFS(os.DirFS(dir), pat)
 	var e *mdlinks.BrokenLinksError
