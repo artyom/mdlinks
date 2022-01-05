@@ -149,14 +149,8 @@ func extractDocDetails(body []byte) (*docDetails, error) {
 		if lines == nil || lines.Len() == 0 {
 			return 0, 0
 		}
-		var start, stop int
-		for i := 0; i < lines.Len(); i++ {
-			l := lines.At(i)
-			if i == 0 {
-				start = l.Start
-			}
-			stop = l.Stop
-		}
+		start := lines.At(0).Start
+		stop := lines.At(lines.Len() - 1).Stop
 		if stop == 0 || start == stop {
 			return 0, 0
 		}
