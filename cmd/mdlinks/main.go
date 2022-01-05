@@ -23,7 +23,15 @@ func main() {
 		for _, l := range e.Links {
 			log.Println(l)
 			if isGithub {
-				log.Printf("::error file=%s,title=%s::%s", l.File, l.Reason(), l)
+				// https://docs.github.com/en/actions/learn-github-actions/workflow-commands-for-github-actions#setting-an-error-message
+				// ::error file={name},line={line},endLine={endLine},title={title}::{message}
+				switch l.Link.LineStart {
+				case 0:
+					log.Printf("::error file=%s,title=%s::%s", l.File, l.Reason(), l)
+				default:
+					log.Printf("::error file=%s,line=%d,endLine=%d,title=%s::%s",
+						l.File, l.Link.LineStart, l.Link.LineEnd, l.Reason(), l)
+				}
 			}
 		}
 		os.Exit(127)

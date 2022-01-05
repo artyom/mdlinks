@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -15,19 +16,37 @@ func TestCheckFS(t *testing.T) {
 	if !errors.As(err, &e) {
 		t.Fatalf("want *ErrBrokenLinks, got %v", err)
 	}
-	expected := []BrokenLink{
-		{"index.md", LinkInfo{Raw: "three.md", Path: "three.md"}, kindFileNotExists},
-		{"one.md", LinkInfo{Raw: "/three.md", Path: "/three.md"}, kindFileNotExists},
-		{"subdir/two.md", LinkInfo{Raw: "../three.md#hi", Path: "../three.md", Fragment: "hi"}, kindFileNotExists},
-	}
-	if len(e.Links) != len(expected) {
-		t.Fatalf("broken links got: %+v\nwant: %+v", e.Links, expected)
-	}
+	want := strings.Join([]string{
+		`index.md: link "three.md" points to a non-existing file`,
+		`one.md: link "/three.md" points to a non-existing file`,
+		`subdir/two.md: link "../three.md#hi" points to a non-existing file`,
+	}, "\n")
+	b := new(strings.Builder)
 	for i, link := range e.Links {
-		if expected[i] != link {
-			t.Fatalf("broken links got: %+v\nwant: %+v", e.Links, expected)
+		if i != 0 {
+			b.WriteString("\n")
 		}
+		b.WriteString(link.String())
 	}
+	if got := b.String(); got != want {
+		t.Fatalf("got:\n%s\n\nwant:\n%s", got, want)
+	}
+	gotLink := e.Links[2]
+	wantLink := BrokenLink{
+		File: "subdir/two.md",
+		Link: LinkInfo{
+			Raw:       "../three.md#hi",
+			Path:      "../three.md",
+			Fragment:  "hi",
+			LineStart: 3,
+			LineEnd:   4,
+		},
+	}
+
+	if gotLink != wantLink {
+		t.Fatalf("got link %#v, want %#v", gotLink, wantLink)
+	}
+
 	// create missing file
 	dir := t.TempDir()
 	if err := copyDirectory(dir, "testdata"); err != nil {

@@ -3,6 +3,7 @@
 package mdlinks
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -75,7 +76,6 @@ func CheckFS(fsys fs.FS, pat string) error {
 		if err != nil {
 			return err
 		}
-		// log.Printf("DEBUG: %s: %v", p, docMeta.anchors)
 		for _, s := range docMeta.links {
 			var srel string // fs.FS relative path that link points to
 
@@ -132,24 +132,88 @@ type docDetails struct {
 }
 
 func extractDocDetails(body []byte) (*docDetails, error) {
-	var links []string
+	// nodeContext returns numbers of the first and the last lines of the link
+	// context: block element that contains it, usually paragraph
+	nodeContext := func(n ast.Node) (int, int) {
+		// only block type nodes have usable Lines() method, so if node is not
+		// a block type, find its first block ancestor
+		for n.Type() != ast.TypeBlock {
+			if n.Type() == ast.TypeDocument {
+				return 0, 0
+			}
+			if n = n.Parent(); n == nil {
+				return 0, 0
+			}
+		}
+		lines := n.Lines()
+		if lines == nil || lines.Len() == 0 {
+			return 0, 0
+		}
+		var start, stop int
+		for i := 0; i < lines.Len(); i++ {
+			l := lines.At(i)
+			if i == 0 {
+				start = l.Start
+			}
+			stop = l.Stop
+		}
+		if stop == 0 || start == stop {
+			return 0, 0
+		}
+		startLine := 1 + bytes.Count(body[:start], []byte{'\n'})
+		endLine := startLine + bytes.Count(body[start:stop], []byte{'\n'})
+		return startLine, endLine
+	}
+
+	var localLinks []LinkInfo
+
+	// localLink parses s and returns *url.URL only if the link is local
+	// (schema-less and domain-less link)
+	localLink := func(s string) *url.URL {
+		if s == "" {
+			return nil
+		}
+		u, err := url.Parse(s)
+		if err != nil || u.Scheme != "" || u.Host != "" {
+			return nil
+		}
+		if u.Path == "" && u.Fragment == "" {
+			return nil
+		}
+		return u
+	}
 	fn := func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
+		var u *url.URL
+		var raw string // link target as seen in the document body
 		switch n.Kind() {
 		case ast.KindAutoLink:
 			if l, ok := n.(*ast.AutoLink); ok && l.AutoLinkType == ast.AutoLinkURL {
-				links = append(links, string(l.URL(body)))
+				raw = string(l.URL(body))
+				u = localLink(raw)
 			}
 		case ast.KindLink:
 			if l, ok := n.(*ast.Link); ok {
-				links = append(links, string(l.Destination))
+				raw = string(l.Destination)
+				u = localLink(raw)
 			}
 		case ast.KindImage:
 			if l, ok := n.(*ast.Image); ok {
-				links = append(links, string(l.Destination))
+				raw = string(l.Destination)
+				u = localLink(raw)
 			}
+		}
+		if u != nil && raw != "" {
+			l1, l2 := nodeContext(n)
+			localLinks = append(localLinks, LinkInfo{
+				Raw:       raw,
+				Path:      u.Path,
+				Fragment:  u.Fragment,
+				LineStart: l1,
+				LineEnd:   l2,
+			})
 		}
 		return ast.WalkContinue, nil
 	}
@@ -158,23 +222,7 @@ func extractDocDetails(body []byte) (*docDetails, error) {
 	if err := ast.Walk(node, fn); err != nil {
 		return nil, err
 	}
-	local := make([]LinkInfo, 0)
-	for _, s := range links {
-		u, err := url.Parse(s)
-		if err != nil || u.Scheme != "" || u.Host != "" {
-			continue
-		}
-		if u.Path == "" && u.Fragment == "" {
-			continue
-		}
-		local = append(local, LinkInfo{Raw: s, Path: u.Path, Fragment: u.Fragment})
-	}
-	out := &docDetails{anchors: idgen.seen}
-	if l := len(local); l != 0 {
-		out.links = make([]LinkInfo, l)
-		copy(out.links, local)
-	}
-	return out, nil
+	return &docDetails{anchors: idgen.seen, links: localLinks}, nil
 }
 
 // BrokenLinksError is an error type returned by this package functions to
@@ -212,15 +260,7 @@ func (b BrokenLink) String() string {
 	return fmt.Sprintf("%s: link %q points to a non-existing file", b.File, b.Link.Raw)
 }
 
-func (b BrokenLink) Reason() string {
-	switch b.kind {
-	case kindBrokenInternalAnchor:
-		return "link points to a non-existing local slug"
-	case kindBrokenExternalAnchor:
-		return "link points to a non-existing slug"
-	}
-	return "link points to a non-existing file"
-}
+func (b BrokenLink) Reason() string { return b.kind.String() }
 
 type violationKind byte
 
@@ -230,11 +270,23 @@ const (
 	kindBrokenExternalAnchor
 )
 
+func (v violationKind) String() string {
+	switch v {
+	case kindBrokenInternalAnchor:
+		return "link points to a non-existing local slug"
+	case kindBrokenExternalAnchor:
+		return "link points to a non-existing slug"
+	}
+	return "link points to a non-existing file"
+}
+
 // LinkInfo describes markdown link
 type LinkInfo struct {
-	Raw      string // as seen in the source, usually “some/path#fragment”
-	Path     string // only the path part of the link
-	Fragment string // only the fragment part of the link, without '#'
+	Raw       string // as seen in the source, usually “some/path#fragment”
+	Path      string // only the path part of the link
+	Fragment  string // only the fragment part of the link, without '#'
+	LineStart int    // number of the first line of the context (usually paragraph)
+	LineEnd   int    // number of the last line of the context (usually paragraph)
 }
 
 var mdparser = parser.NewParser(
