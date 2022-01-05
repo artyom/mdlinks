@@ -36,13 +36,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: artyom/mdlinks@v0
+      - uses: artyom/mdlinks@main
 ```
 
 You can customize what directory to scan and which files to match:
 
 ```yaml
-- uses: artyom/mdlinks@v0
+- uses: artyom/mdlinks@main
   with:
     dir: 'docs'
     glob: '*.markdown'
