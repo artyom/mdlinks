@@ -21,6 +21,7 @@ func Test_slugify(t *testing.T) {
 		{`Header *with formatting*`, `header-with-formatting`},
 		{`Header with & symbol`, `header-with--symbol`},
 		{`Punctuation,   and    repeating:  spaces`, `punctuation---and----repeating--spaces`},
+		{`_foo_bar`, `_foo_bar`},
 	}
 	for _, c := range testCases {
 		got := slugify([]byte(c.text))

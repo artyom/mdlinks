@@ -330,7 +330,7 @@ func slugify(value []byte) string {
 	}
 	for i, r := range text {
 		switch {
-		case r == '-':
+		case r == '-' || r == '_':
 			anchorName = append(anchorName, r)
 		case unicode.IsSpace(r) && i != 0:
 			anchorName = append(anchorName, '-')
