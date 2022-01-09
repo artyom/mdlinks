@@ -11,7 +11,7 @@ import (
 )
 
 func TestCheckFS(t *testing.T) {
-	err := CheckFS(os.DirFS("testdata"), "*.md")
+	err := CheckFS(os.DirFS(filepath.FromSlash("testdata/a")), "*.md")
 	var e *BrokenLinksError
 	if !errors.As(err, &e) {
 		t.Fatalf("want *ErrBrokenLinks, got %v", err)
@@ -49,7 +49,7 @@ func TestCheckFS(t *testing.T) {
 
 	// create missing file
 	dir := t.TempDir()
-	if err := copyDirectory(dir, "testdata"); err != nil {
+	if err := copyDirectory(dir, filepath.FromSlash("testdata/a")); err != nil {
 		t.Fatalf("copying testdata: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "three.md"), []byte("## Hi!\n"), 0666); err != nil {
