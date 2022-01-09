@@ -302,21 +302,7 @@ func (g *idGenerator) Generate(value []byte, kind ast.NodeKind) []byte {
 	if g.seen == nil {
 		g.seen = make(map[string]struct{})
 	}
-	var anchorName []rune
-	var futureDash = false
-	for _, r := range string(value) {
-		switch {
-		case unicode.IsLetter(r) || unicode.IsNumber(r):
-			if futureDash && len(anchorName) > 0 {
-				anchorName = append(anchorName, '-')
-			}
-			futureDash = false
-			anchorName = append(anchorName, unicode.ToLower(r))
-		default:
-			futureDash = true
-		}
-	}
-	name := string(anchorName)
+	name := slugify(value)
 	for i := 0; i < 100; i++ {
 		var cand string
 		if i == 0 {
@@ -333,3 +319,52 @@ func (g *idGenerator) Generate(value []byte, kind ast.NodeKind) []byte {
 }
 
 func (g *idGenerator) Put(value []byte) {}
+
+func slugify(value []byte) string {
+	var anchorName []rune
+	var text string
+	if bytes.ContainsRune(value, ']') {
+		text = textOnly(value)
+	} else {
+		text = string(value)
+	}
+	for i, r := range text {
+		switch {
+		case unicode.IsSpace(r) && i != 0:
+			anchorName = append(anchorName, '-')
+		case unicode.IsLetter(r) || unicode.IsNumber(r):
+			anchorName = append(anchorName, unicode.ToLower(r))
+		}
+	}
+	return string(anchorName)
+}
+
+// basicParser is used inside header slug generator to parse header values
+// which may have non-trivial formatting
+var basicParser = parser.NewParser(
+	parser.WithBlockParsers(parser.DefaultBlockParsers()...),
+	parser.WithInlineParsers(parser.DefaultInlineParsers()...),
+)
+
+// textOnly parses value with basicParser and returns concatenated contents of
+// text nodes, effectively removing all markdown syntax
+func textOnly(value []byte) string {
+	var b strings.Builder
+	fn := func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch n.Kind() {
+		case ast.KindText:
+			if t, ok := n.(*ast.Text); ok {
+				b.Write(t.Text(value))
+			}
+		}
+		return ast.WalkContinue, nil
+	}
+	node := basicParser.Parse(text.NewReader(value))
+	if err := ast.Walk(node, fn); err != nil {
+		return ""
+	}
+	return b.String()
+}

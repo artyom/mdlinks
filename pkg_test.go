@@ -10,6 +10,25 @@ import (
 	"testing"
 )
 
+func Test_slugify(t *testing.T) {
+	testCases := []struct {
+		text, want string
+	}{
+		{`Foo/Bar`, `foobar`},
+		{`Foo (Bar)`, `foo-bar`},
+		{`A [Link](https://example.org/) Inside`, `a-link-inside`},
+		{`Header *with formatting*`, `header-with-formatting`},
+		{`Header with & symbol`, `header-with--symbol`},
+		{`Punctuation,   and    repeating:  spaces`, `punctuation---and----repeating--spaces`},
+	}
+	for _, c := range testCases {
+		got := slugify([]byte(c.text))
+		if got != c.want {
+			t.Errorf("text: %q, got %q, want %q", c.text, got, c.want)
+		}
+	}
+}
+
 func TestCheckFS(t *testing.T) {
 	err := CheckFS(os.DirFS(filepath.FromSlash("testdata/a")), "*.md")
 	var e *BrokenLinksError
