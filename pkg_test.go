@@ -16,6 +16,7 @@ func Test_slugify(t *testing.T) {
 	}{
 		{`Foo/Bar`, `foobar`},
 		{`Foo (Bar)`, `foo-bar`},
+		{`-Client-Side`, `-client-side`},
 		{`A [Link](https://example.org/) Inside`, `a-link-inside`},
 		{`Header *with formatting*`, `header-with-formatting`},
 		{`Header with & symbol`, `header-with--symbol`},
