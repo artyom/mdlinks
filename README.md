@@ -9,9 +9,11 @@ this tool will check whether the “img.png” file exists in a “doc1.md” fi
 
 If a link references an existing markdown document and has a fragment part,
 this tool checks that such a link points to an existing markdown header,
-using the same rules of unique ID generating as GitHub markdown rendering.
+following similar (but not exactly matching) rules of unique ID generating as GitHub markdown rendering.
 
 For example, use the `#table-of-contents` link fragment to reference the “Table of Contents” header.
+
+Using special symbols or extra formatting in the header will likely produce an ID that differs from what GitHub could have generated.
 
 ## Command-line tool
 
