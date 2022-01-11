@@ -160,6 +160,7 @@ func extractDocDetails(body []byte) (*docDetails, error) {
 	}
 
 	var localLinks []LinkInfo
+	var anchors map[string]struct{}
 
 	// localLink parses s and returns *url.URL only if the link is local
 	// (schema-less and domain-less link)
@@ -183,6 +184,27 @@ func extractDocDetails(body []byte) (*docDetails, error) {
 		var u *url.URL
 		var raw string // link target as seen in the document body
 		switch n.Kind() {
+		case ast.KindHeading:
+			if n, ok := n.(*ast.Heading); ok {
+				if text := nodeText(n, body); text != "" {
+					name := slugify(text)
+					if anchors == nil {
+						anchors = make(map[string]struct{})
+					}
+					for i := 0; i < 100; i++ {
+						var cand string
+						if i == 0 {
+							cand = name
+						} else {
+							cand = fmt.Sprintf("%s-%d", name, i)
+						}
+						if _, ok := anchors[cand]; !ok {
+							anchors[cand] = struct{}{}
+							break
+						}
+					}
+				}
+			}
 		case ast.KindAutoLink:
 			if l, ok := n.(*ast.AutoLink); ok && l.AutoLinkType == ast.AutoLinkURL {
 				raw = string(l.URL(body))
@@ -211,12 +233,11 @@ func extractDocDetails(body []byte) (*docDetails, error) {
 		}
 		return ast.WalkContinue, nil
 	}
-	idgen := new(idGenerator)
-	node := mdparser.Parse(text.NewReader(body), parser.WithContext(parser.NewContext(parser.WithIDs(idgen))))
+	node := mdparser.Parse(text.NewReader(body))
 	if err := ast.Walk(node, fn); err != nil {
 		return nil, err
 	}
-	return &docDetails{anchors: idgen.seen, links: localLinks}, nil
+	return &docDetails{anchors: anchors, links: localLinks}, nil
 }
 
 // BrokenLinksError is an error type returned by this package functions to
@@ -287,47 +308,32 @@ var mdparser = parser.NewParser(
 	parser.WithBlockParsers(parser.DefaultBlockParsers()...),
 	parser.WithInlineParsers(parser.DefaultInlineParsers()...),
 	parser.WithParagraphTransformers(parser.DefaultParagraphTransformers()...),
-	parser.WithAutoHeadingID(),
 )
 
-// idGenerator creates ids for HTML headers
-type idGenerator struct {
-	seen map[string]struct{}
+// nodeText walks node and extracts plain text from it and its descendants,
+// effectively removing all markdown syntax
+func nodeText(node ast.Node, src []byte) string {
+	var b strings.Builder
+	fn := func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch n.Kind() {
+		case ast.KindText:
+			if t, ok := n.(*ast.Text); ok {
+				b.Write(t.Text(src))
+			}
+		}
+		return ast.WalkContinue, nil
+	}
+	if err := ast.Walk(node, fn); err != nil {
+		return ""
+	}
+	return b.String()
 }
 
-func (g *idGenerator) Generate(value []byte, kind ast.NodeKind) []byte {
-	if kind != ast.KindHeading || len(value) == 0 {
-		return nil
-	}
-	if g.seen == nil {
-		g.seen = make(map[string]struct{})
-	}
-	name := slugify(value)
-	for i := 0; i < 100; i++ {
-		var cand string
-		if i == 0 {
-			cand = name
-		} else {
-			cand = fmt.Sprintf("%s-%d", name, i)
-		}
-		if _, ok := g.seen[cand]; !ok {
-			g.seen[cand] = struct{}{}
-			return []byte(cand)
-		}
-	}
-	return nil
-}
-
-func (g *idGenerator) Put(value []byte) {}
-
-func slugify(value []byte) string {
+func slugify(text string) string {
 	var anchorName []rune
-	var text string
-	if bytes.ContainsRune(value, ']') {
-		text = textOnly(value)
-	} else {
-		text = string(value)
-	}
 	for i, r := range text {
 		switch {
 		case r == '-' || r == '_':
@@ -339,34 +345,4 @@ func slugify(value []byte) string {
 		}
 	}
 	return string(anchorName)
-}
-
-// basicParser is used inside header slug generator to parse header values
-// which may have non-trivial formatting
-var basicParser = parser.NewParser(
-	parser.WithBlockParsers(parser.DefaultBlockParsers()...),
-	parser.WithInlineParsers(parser.DefaultInlineParsers()...),
-)
-
-// textOnly parses value with basicParser and returns concatenated contents of
-// text nodes, effectively removing all markdown syntax
-func textOnly(value []byte) string {
-	var b strings.Builder
-	fn := func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-		switch n.Kind() {
-		case ast.KindText:
-			if t, ok := n.(*ast.Text); ok {
-				b.Write(t.Text(value))
-			}
-		}
-		return ast.WalkContinue, nil
-	}
-	node := basicParser.Parse(text.NewReader(value))
-	if err := ast.Walk(node, fn); err != nil {
-		return ""
-	}
-	return b.String()
 }

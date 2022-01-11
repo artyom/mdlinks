@@ -11,6 +11,7 @@ import (
 )
 
 func Test_slugify(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		text, want string
 	}{
@@ -23,15 +24,49 @@ func Test_slugify(t *testing.T) {
 		{`Punctuation,   and    repeating:  spaces`, `punctuation---and----repeating--spaces`},
 		{`_foo_bar`, `_foo_bar`},
 	}
+	var body []byte
 	for _, c := range testCases {
-		got := slugify([]byte(c.text))
+		body = body[:0]
+		body = append([]byte("# "), c.text...)
+		body = append(body, "\n\nText\n"...)
+		d, err := extractDocDetails(body)
+		if err != nil {
+			t.Fatalf("extracting doc details for header %q: %v", c.text, err)
+		}
+		if len(d.anchors) != 1 {
+			t.Fatalf("got anchors: %v, want exactly 1", d.anchors)
+		}
+		var got string
+		for got = range d.anchors {
+			break
+		}
 		if got != c.want {
 			t.Errorf("text: %q, got %q, want %q", c.text, got, c.want)
 		}
 	}
 }
 
+func testHeaderFormatting(t *testing.T) {
+	t.Parallel()
+	err := CheckFS(os.DirFS(filepath.FromSlash("testdata/b")), "*.md")
+	if err != nil {
+		var e *BrokenLinksError
+		if errors.As(err, &e) {
+			for _, link := range e.Links {
+				t.Logf("%v", link)
+			}
+		}
+		t.Fatalf("want no error, got: %v", err)
+	}
+}
+
 func TestCheckFS(t *testing.T) {
+	t.Run("general", testCheckFS)
+	t.Run("headers-with-links", testHeaderFormatting)
+}
+
+func testCheckFS(t *testing.T) {
+	t.Parallel()
 	err := CheckFS(os.DirFS(filepath.FromSlash("testdata/a")), "*.md")
 	var e *BrokenLinksError
 	if !errors.As(err, &e) {
