@@ -61,11 +61,36 @@ func testHeaderFormatting(t *testing.T) {
 }
 
 func TestCheckFS(t *testing.T) {
-	t.Run("general", testCheckFS)
+	t.Run("general1", test1CheckFS)
+	t.Run("general2", test2CheckFS)
 	t.Run("headers-with-links", testHeaderFormatting)
 }
 
-func testCheckFS(t *testing.T) {
+func test2CheckFS(t *testing.T) {
+	t.Parallel()
+	err := CheckFS(os.DirFS(filepath.FromSlash("testdata/c")), "*.md")
+	var e *BrokenLinksError
+	if !errors.As(err, &e) {
+		t.Fatalf("want *ErrBrokenLinks, got %v", err)
+	}
+	want := strings.Join([]string{
+		`one.md: link "#bad-ref" points to a non-existing local slug`,
+		`one.md: link "two.md#bad-ref" points to a non-existing slug`,
+		`two.md: link "image.png" points to a non-existing file`,
+	}, "\n")
+	b := new(strings.Builder)
+	for i, link := range e.Links {
+		if i != 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(link.String())
+	}
+	if got := b.String(); got != want {
+		t.Fatalf("got:\n%s\n\nwant:\n%s", got, want)
+	}
+}
+
+func test1CheckFS(t *testing.T) {
 	t.Parallel()
 	err := CheckFS(os.DirFS(filepath.FromSlash("testdata/a")), "*.md")
 	var e *BrokenLinksError
