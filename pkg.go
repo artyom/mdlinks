@@ -17,16 +17,36 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
-// CheckFS walks file system fsys looking for files with their base names
-// matching pattern pat. It parses such files as markdown, looks for local urls
-// (urls don't have schema and domain), and reports if it finds any urls
-// pointing to non-existing files.
+// Checker allows checks customization.
+//
+// Usage example:
+//
+// 	c := &mdlinks.Checker{
+// 	    Matcher: func(s string) (bool, error) { return path.Ext(s) == ".md", nil },
+// 	}
+// 	err := c.CheckFS(os.DirFS(dir))
+type Checker struct {
+	// Matcher takes /-separated paths when CheckFS method traverses filesystem
+	// (see documentation on fs.WalkDirFunc, its first argument). If Matcher
+	// returns a non-nil error, CheckFS stops and returns this error. If
+	// Matcher returns true, file is considered an utf-8 markdown document and
+	// is processed.
+	Matcher func(path string) (bool, error)
+}
+
+// CheckFS walks file system fsys looking for files using the Matcher function.
+// It parses matched files as markdown, looks for local urls (urls that don't
+// have schema and domain), and reports if it finds any urls pointing to
+// non-existing files.
 //
 // If error returned is a *BrokenLinksError, it describes found files with
 // broken links.
-func CheckFS(fsys fs.FS, pat string) error {
-	if _, err := path.Match(pat, "xxx"); err != nil { // report bad pattern early
-		return err
+func (c *Checker) CheckFS(fsys fs.FS) error {
+	if c == nil {
+		panic("mdlinks: CheckFS called on a nil Checker")
+	}
+	if c.Matcher == nil {
+		panic("mdlinks: CheckFS called with a nil Checker.Matcher")
 	}
 	exists := func(p string) bool {
 		f, err := fsys.Open(p)
@@ -69,7 +89,10 @@ func CheckFS(fsys fs.FS, pat string) error {
 		if d.IsDir() {
 			return nil
 		}
-		if ok, _ := path.Match(pat, d.Name()); !ok {
+		switch ok, err := c.Matcher(p); {
+		case err != nil:
+			return err
+		case !ok:
 			return nil
 		}
 		docMeta, err := getFileMeta(p)
@@ -99,7 +122,7 @@ func CheckFS(fsys fs.FS, pat string) error {
 			if srel == "" || s.Fragment == "" {
 				continue
 			}
-			if ok, _ := path.Match(pat, path.Base(srel)); !ok {
+			if ok, _ := c.Matcher(srel); !ok {
 				continue
 			}
 			// path is non-empty, fragment is non-empty, path points to the markdown file
@@ -124,6 +147,23 @@ func CheckFS(fsys fs.FS, pat string) error {
 		return &BrokenLinksError{Links: brokenLinks}
 	}
 	return nil
+}
+
+// CheckFS walks file system fsys looking for files with their base names
+// matching pattern pat (e.g. “*.md”). It parses such files as markdown, looks
+// for local urls (urls that don't have schema and domain), and reports if it
+// finds any urls pointing to non-existing files.
+//
+// If error returned is a *BrokenLinksError, it describes found files with
+// broken links.
+func CheckFS(fsys fs.FS, pat string) error {
+	if _, err := path.Match(pat, "xxx"); err != nil { // report bad pattern early
+		return err
+	}
+	c := &Checker{
+		Matcher: func(s string) (bool, error) { return path.Match(pat, path.Base(s)) },
+	}
+	return c.CheckFS(fsys)
 }
 
 type docDetails struct {
@@ -248,9 +288,9 @@ func extractDocDetails(body []byte) (*docDetails, error) {
 // 	err := mdlinks.CheckFS(os.DirFS(dir), "*.md")
 // 	var e *mdlinks.BrokenLinksError
 // 	if errors.As(err, &e) {
-// 		for _, link := range e.Links {
-// 			log.Println(link)
-// 		}
+// 	    for _, link := range e.Links {
+// 	        log.Println(link)
+// 	    }
 // 	}
 type BrokenLinksError struct {
 	Links []BrokenLink
