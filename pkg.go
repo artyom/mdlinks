@@ -373,16 +373,16 @@ func nodeText(node ast.Node, src []byte) string {
 }
 
 func slugify(text string) string {
-	var anchorName []rune
-	for i, r := range text {
+	f := func(r rune) rune {
 		switch {
 		case r == '-' || r == '_':
-			anchorName = append(anchorName, r)
-		case unicode.IsSpace(r) && i != 0:
-			anchorName = append(anchorName, '-')
+			return r
+		case unicode.IsSpace(r):
+			return '-'
 		case unicode.IsLetter(r) || unicode.IsNumber(r):
-			anchorName = append(anchorName, unicode.ToLower(r))
+			return unicode.ToLower(r)
 		}
+		return -1
 	}
-	return string(anchorName)
+	return strings.Map(f, text)
 }
