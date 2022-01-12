@@ -226,8 +226,7 @@ func extractDocDetails(body []byte) (*docDetails, error) {
 		switch n.Kind() {
 		case ast.KindHeading:
 			if n, ok := n.(*ast.Heading); ok {
-				if text := nodeText(n, body); text != "" {
-					name := slugify(text)
+				if name := slugify(nodeText(n, body)); name != "" {
 					if anchors == nil {
 						anchors = make(map[string]struct{})
 					}
