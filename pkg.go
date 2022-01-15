@@ -374,12 +374,12 @@ func nodeText(node ast.Node, src []byte) string {
 func slugify(text string) string {
 	f := func(r rune) rune {
 		switch {
-		case r == '-' || r == '_':
-			return r
-		case unicode.IsSpace(r):
-			return '-'
 		case unicode.IsLetter(r) || unicode.IsNumber(r):
 			return unicode.ToLower(r)
+		case unicode.IsSpace(r):
+			return '-'
+		case r == '-' || r == '_':
+			return r
 		}
 		return -1
 	}
