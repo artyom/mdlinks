@@ -1,4 +1,5 @@
 FROM public.ecr.aws/docker/library/golang:alpine AS builder
+RUN apk add git
 WORKDIR /app
 ENV CGO_ENABLED=0 GOFLAGS=-trimpath
 COPY go.mod go.sum ./
