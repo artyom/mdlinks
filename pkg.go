@@ -21,10 +21,10 @@ import (
 //
 // Usage example:
 //
-// 	c := &mdlinks.Checker{
-// 	    Matcher: func(s string) (bool, error) { return path.Ext(s) == ".md", nil },
-// 	}
-// 	err := c.CheckFS(os.DirFS(dir))
+//	c := &mdlinks.Checker{
+//	    Matcher: func(s string) (bool, error) { return path.Ext(s) == ".md", nil },
+//	}
+//	err := c.CheckFS(os.DirFS(dir))
 type Checker struct {
 	// Matcher takes /-separated paths when CheckFS method traverses filesystem
 	// (see documentation on fs.WalkDirFunc, its first argument). If Matcher
@@ -284,13 +284,13 @@ func extractDocDetails(body []byte) (*docDetails, error) {
 //
 // Usage example:
 //
-// 	err := mdlinks.CheckFS(os.DirFS(dir), "*.md")
-// 	var e *mdlinks.BrokenLinksError
-// 	if errors.As(err, &e) {
-// 	    for _, link := range e.Links {
-// 	        log.Println(link)
-// 	    }
-// 	}
+//	err := mdlinks.CheckFS(os.DirFS(dir), "*.md")
+//	var e *mdlinks.BrokenLinksError
+//	if errors.As(err, &e) {
+//	    for _, link := range e.Links {
+//	        log.Println(link)
+//	    }
+//	}
 type BrokenLinksError struct {
 	Links []BrokenLink
 }
